@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.db.database import db
+from app.db.mongodb import db
 
 app = FastAPI()
 

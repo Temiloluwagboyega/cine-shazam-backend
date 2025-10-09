@@ -21,30 +21,30 @@ app = FastAPI(
 
 # Configure CORS origins based on environment
 def get_cors_origins():
-    """Get CORS origins based on environment variables"""
-    origins = [
-        "http://localhost:3000",  # React dev server
-        "http://localhost:3001",  # Alternative React port
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:8080",  # Vue dev server
-    ]
-    
-    # Add production origins from environment variables
-    if os.getenv("FRONTEND_URL"):
-        origins.append(os.getenv("FRONTEND_URL"))
-    
-    # Add common deployment platforms
-    origins.extend([
-        "https://*.vercel.app",  # Vercel deployments
-        "https://*.netlify.app",  # Netlify deployments
-        "https://*.render.com",   # Render deployments
-    ])
-    
-    # In development, allow all origins
-    if os.getenv("ENVIRONMENT") == "development":
-        origins.append("*")
-    
-    return origins
+	"""Get CORS origins based on environment variables"""
+	origins = [
+		"http://localhost:3000",  # React dev server
+		"http://localhost:3001",  # Alternative React port
+		"http://localhost:5173",  # Vite dev server
+		"http://localhost:8080",  # Vue dev server
+	]
+	
+	# Add production origins from environment variables
+	if os.getenv("FRONTEND_URL"):
+		origins.append(os.getenv("FRONTEND_URL"))
+	
+	# Add specific production domains
+	origins.extend([
+		"https://cine-shazam.vercel.app",  # Your specific Vercel deployment
+		"https://cine-shazam.netlify.app",  # Netlify (if used)
+		"https://cine-shazam.onrender.com",  # Render (if used)
+	])
+	
+	# For production, allow all origins to avoid CORS issues
+	# In development, also allow all origins
+	origins = ["*"]
+	
+	return origins
 
 # Add CORS middleware for production
 app.add_middleware(

@@ -375,24 +375,97 @@ async def test_kaggle_dataset():
 		logger.error(f"Error testing Kaggle dataset: {str(e)}")
 		raise HTTPException(status_code=500, detail=f"Error testing Kaggle dataset: {str(e)}")
 
+@router.get("/test-mongodb-connection")
+async def test_mongodb_connection():
+	"""Test MongoDB connection and search functionality"""
+	try:
+		# Test connection
+		multi_search.mongodb_search._connect()
+		
+		if not multi_search.mongodb_search._connected:
+			return {
+				"success": False,
+				"error": "MongoDB connection failed",
+				"connection_status": "disconnected"
+			}
+		
+		# Get database info
+		db_info = multi_search.mongodb_search.get_database_info()
+		
+		# Test search with multiple queries
+		test_queries = [
+			"we need to go deeper",
+			"hello world",
+			"the matrix",
+			"inception"
+		]
+		
+		search_results = {}
+		for query in test_queries:
+			try:
+				results = await multi_search.mongodb_search.search_subtitles(query, limit=3)
+				search_results[query] = {
+					"success": True,
+					"result_count": len(results),
+					"results": results[:2] if results else []  # Show first 2 results
+				}
+			except Exception as e:
+				search_results[query] = {
+					"success": False,
+					"error": str(e)
+				}
+		
+		return {
+			"success": True,
+			"connection_status": "connected",
+			"database_info": db_info,
+			"search_tests": search_results
+		}
+		
+	except Exception as e:
+		logger.error(f"Error testing MongoDB connection: {str(e)}")
+		return {
+			"success": False,
+			"error": str(e),
+			"connection_status": "error"
+		}
+
 @router.get("/health")
 async def health_check():
 	"""Health check endpoint with database connectivity"""
 	try:
-		# Check MongoDB connection
-		db_status = "connected"
+		# Check MongoDB connection with proper testing
+		db_status = "disconnected"
+		db_info = {}
+		
 		try:
+			# Try to connect and get database info
 			multi_search.mongodb_search._connect()
-			if not multi_search.mongodb_search._connected:
+			
+			if multi_search.mongodb_search._connected:
+				# Test actual database access
+				db_info = multi_search.mongodb_search.get_database_info()
+				if db_info.get('status') == 'connected':
+					db_status = "connected"
+					db_info = {
+						"total_documents": db_info.get('total_documents', 0),
+						"connection_method": "working"
+					}
+				else:
+					db_status = f"error: {db_info.get('error', 'Unknown error')}"
+			else:
 				db_status = "disconnected"
+				
 		except Exception as e:
 			db_status = f"error: {str(e)}"
+			logger.warning(f"Database health check failed: {str(e)}")
 		
 		return {
 			"status": "healthy",
 			"service": "movie-identification",
 			"environment": settings.ENVIRONMENT,
 			"database": db_status,
+			"database_info": db_info,
 			"version": "1.0.0"
 		}
 	except Exception as e:

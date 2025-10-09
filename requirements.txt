@@ -1,15 +1,28 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-python-multipart
-motor
-pymongo[srv]
-requests
-pysrt
-torch
-sentence-transformers
-faiss-cpu
-openai-whisper
-yt-dlp
-moviepy
-numpy
+# Core FastAPI dependencies
+fastapi==0.118.2
+uvicorn[standard]==0.37.0
+python-dotenv==1.1.1
+python-multipart==0.0.20
+
+# HTTP and requests
+requests==2.32.5
+
+# Media processing
+yt-dlp==2025.9.26
+moviepy==2.2.1
+ffmpeg-python==0.2.0
+pysrt==1.1.2
+
+# Data processing
+numpy==2.3.3
+pandas==2.3.3
+aiofiles==24.1.0
+
+# Database
+pymongo==4.15.3
+
+# Speech recognition
+SpeechRecognition==3.14.3
+
+# Data loading (for processing script)
+kagglehub[pandas-datasets]==0.3.13

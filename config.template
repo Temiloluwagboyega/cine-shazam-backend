@@ -1,12 +1,25 @@
 # Environment Configuration Template
 # Copy this file to .env and fill in your actual values
 
+# Environment
+ENVIRONMENT=production
+DEBUG=false
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000
+
 # MongoDB Configuration
-MONGO_URI=mongodb://localhost:27017
+MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/
 MONGO_DB=cine_shazam
 
-# OpenSubtitles API Configuration
-# Get your API key from: https://www.opensubtitles.com/en/consumers
-OPENSUBTITLES_API_KEY=your_api_key_here
-OPENSUBTITLES_USERNAME=your_username_here
-OPENSUBTITLES_PASSWORD=your_password_here
+# Frontend Configuration (for CORS)
+FRONTEND_URL=https://your-frontend-domain.com
+
+# Speech-to-Text Configuration
+WHISPER_MODEL=base
+CHUNK_MAX_SECONDS=10
+
+# File Upload Configuration
+MAX_FILE_SIZE=104857600
+UPLOAD_TIMEOUT=300

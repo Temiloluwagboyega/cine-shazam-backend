@@ -17,27 +17,80 @@ class MongoDBSubtitleSearch:
 		self._connected = False
 		
 	def _connect(self):
-		"""Connect to MongoDB"""
+		"""Connect to MongoDB with fallback SSL configurations"""
 		if self._connected:
 			return
 			
-		try:
-			logger.info("Connecting to MongoDB Atlas...")
-			if not settings.MONGO_URI:
-				raise Exception("MONGO_URI not found in environment variables")
-			
-			self.client = MongoClient(settings.MONGO_URI, tls=True, tlsAllowInvalidCertificates=True)
-			self.db = self.client[settings.MONGO_DB]
-			self.collection = self.db["movie_subtitles"]
-			
-			# Test connection
-			self.collection.count_documents({})
-			self._connected = True
-			logger.info("Successfully connected to MongoDB")
-			
-		except Exception as e:
-			logger.error(f"Error connecting to MongoDB: {str(e)}")
+		if not settings.MONGO_URI:
+			logger.error("MONGO_URI not found in environment variables")
 			self._connected = False
+			return
+		
+		# Try multiple connection configurations
+		connection_configs = [
+			{
+				"name": "Standard SSL",
+				"params": {
+					"tls": True,
+					"tlsAllowInvalidCertificates": False,
+					"tlsAllowInvalidHostnames": False,
+					"serverSelectionTimeoutMS": 30000,
+					"connectTimeoutMS": 30000,
+					"socketTimeoutMS": 30000,
+					"maxPoolSize": 10,
+					"retryWrites": True
+				}
+			},
+			{
+				"name": "Relaxed SSL",
+				"params": {
+					"tls": True,
+					"tlsAllowInvalidCertificates": True,
+					"tlsAllowInvalidHostnames": True,
+					"serverSelectionTimeoutMS": 30000,
+					"connectTimeoutMS": 30000,
+					"socketTimeoutMS": 30000,
+					"maxPoolSize": 10,
+					"retryWrites": True
+				}
+			},
+			{
+				"name": "No SSL",
+				"params": {
+					"tls": False,
+					"serverSelectionTimeoutMS": 30000,
+					"connectTimeoutMS": 30000,
+					"socketTimeoutMS": 30000,
+					"maxPoolSize": 10,
+					"retryWrites": True
+				}
+			}
+		]
+		
+		for config in connection_configs:
+			try:
+				logger.info(f"Trying MongoDB connection with {config['name']}...")
+				
+				self.client = MongoClient(settings.MONGO_URI, **config['params'])
+				self.db = self.client[settings.MONGO_DB]
+				self.collection = self.db["movie_subtitles"]
+				
+				# Test connection
+				self.collection.count_documents({})
+				self._connected = True
+				logger.info(f"Successfully connected to MongoDB using {config['name']}")
+				return
+				
+			except Exception as e:
+				logger.warning(f"Failed to connect with {config['name']}: {str(e)}")
+				if self.client:
+					self.client.close()
+					self.client = None
+				continue
+		
+		# If all connection attempts failed
+		logger.error("All MongoDB connection attempts failed")
+		self._connected = False
 	
 	async def search_subtitles(self, query: str, limit: int = 10) -> List[Dict]:
 		"""

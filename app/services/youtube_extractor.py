@@ -14,10 +14,83 @@ class YouTubeExtractor:
 	
 	def __init__(self):
 		self.executor = ThreadPoolExecutor(max_workers=2)
+	
+	def _get_common_ydl_opts(self) -> Dict:
+		"""Get common yt-dlp options for all operations with bot detection bypass"""
+		opts = {
+			'quiet': True,
+			'no_warnings': True,
+			'extract_flat': False,
+			# Advanced bot detection bypass
+			'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+			'referer': 'https://www.youtube.com/',
+			'http_headers': {
+				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+				'Accept-Language': 'en-US,en;q=0.9',
+				'Accept-Encoding': 'gzip, deflate, br',
+				'Connection': 'keep-alive',
+				'Upgrade-Insecure-Requests': '1',
+				'Sec-Fetch-Dest': 'document',
+				'Sec-Fetch-Mode': 'navigate',
+				'Sec-Fetch-Site': 'none',
+				'Sec-Fetch-User': '?1',
+				'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+				'sec-ch-ua-mobile': '?0',
+				'sec-ch-ua-platform': '"Windows"',
+			},
+			# Retry and timeout options
+			'extractor_retries': 5,
+			'fragment_retries': 5,
+			'retries': 5,
+			'socket_timeout': 60,
+			# Additional bypass options
+			'geo_bypass': True,
+			'geo_bypass_country': 'US',
+			'prefer_insecure': False,
+			'no_check_certificate': False,
+		}
+		
+		# Try to use cookies if available
+		try:
+			import os
+			import platform
+			
+			if platform.system() == 'Windows':
+				cookie_paths = [
+					os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies'),
+					os.path.expanduser('~\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies'),
+				]
+			elif platform.system() == 'Darwin':  # macOS
+				cookie_paths = [
+					os.path.expanduser('~/Library/Application Support/Google/Chrome/Default/Cookies'),
+					os.path.expanduser('~/Library/Application Support/Microsoft Edge/Default/Cookies'),
+				]
+			else:  # Linux
+				cookie_paths = [
+					os.path.expanduser('~/.config/google-chrome/Default/Cookies'),
+					os.path.expanduser('~/.config/microsoft-edge/Default/Cookies'),
+				]
+			
+			# Try to use cookies from browser
+			for cookie_path in cookie_paths:
+				if os.path.exists(cookie_path):
+					try:
+						opts['cookiesfrombrowser'] = ('chrome', None, None, cookie_path)
+						logger.info(f"Using cookies from: {cookie_path}")
+						break
+					except Exception as e:
+						logger.debug(f"Failed to use cookies from {cookie_path}: {e}")
+						continue
+		except Exception as e:
+			logger.debug(f"Cookie setup failed: {e}")
+		
+		return opts
 		
 	def _get_ydl_opts(self, output_path: str) -> Dict:
-		"""Get yt-dlp options for audio extraction with bot detection bypass"""
-		return {
+		"""Get yt-dlp options for audio extraction with comprehensive bot detection bypass"""
+		opts = self._get_common_ydl_opts()
+		opts.update({
 			'format': 'bestaudio/best',
 			'outtmpl': output_path.replace('.wav', '.%(ext)s'),
 			'postprocessors': [{
@@ -26,26 +99,8 @@ class YouTubeExtractor:
 				'preferredquality': '192',
 			}],
 			'noplaylist': True,
-			'quiet': True,
-			'no_warnings': True,
-			'extract_flat': False,
-			# Bot detection bypass options
-			'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-			'referer': 'https://www.youtube.com/',
-			'http_headers': {
-				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-				'Accept-Language': 'en-us,en;q=0.5',
-				'Accept-Encoding': 'gzip, deflate',
-				'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-				'Connection': 'keep-alive',
-			},
-			# Additional bypass options
-			'extractor_retries': 3,
-			'fragment_retries': 3,
-			'retries': 3,
-			'socket_timeout': 30,
-		}
+		})
+		return opts
 	
 	async def extract_audio_from_url(self, youtube_url: str, max_duration: int = 300) -> Optional[Tuple[str, Dict]]:
 		"""
@@ -97,27 +152,10 @@ class YouTubeExtractor:
 		"""Stream audio using yt-dlp with FFmpeg in a separate thread"""
 		try:
 			# Get the best audio URL without downloading
-			ydl_opts = {
+			ydl_opts = self._get_common_ydl_opts()
+			ydl_opts.update({
 				'format': 'bestaudio/best',
-				'quiet': True,
-				'no_warnings': True,
-				'extract_flat': False,
-				# Bot detection bypass options
-				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-				'referer': 'https://www.youtube.com/',
-				'http_headers': {
-					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-					'Accept-Language': 'en-us,en;q=0.5',
-					'Accept-Encoding': 'gzip, deflate',
-					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-					'Connection': 'keep-alive',
-				},
-				'extractor_retries': 3,
-				'fragment_retries': 3,
-				'retries': 3,
-				'socket_timeout': 30,
-			}
+			})
 			
 			with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 				info = ydl.extract_info(youtube_url, download=False)
@@ -198,51 +236,53 @@ class YouTubeExtractor:
 			return None
 	
 	async def _get_video_info(self, youtube_url: str) -> Optional[Dict]:
-		"""Get video information without downloading"""
-		try:
-			ydl_opts = {
+		"""Get video information without downloading with fallback methods"""
+		# Try multiple approaches
+		approaches = [
+			("standard", self._get_common_ydl_opts()),
+			("minimal", {
 				'quiet': True,
 				'no_warnings': True,
-				# Bot detection bypass options
-				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-				'referer': 'https://www.youtube.com/',
-				'http_headers': {
-					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-					'Accept-Language': 'en-us,en;q=0.5',
-					'Accept-Encoding': 'gzip, deflate',
-					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-					'Connection': 'keep-alive',
-				},
-				'extractor_retries': 3,
-				'fragment_retries': 3,
-				'retries': 3,
-				'socket_timeout': 30,
-			}
-			
-			loop = asyncio.get_event_loop()
-			info = await loop.run_in_executor(
-				self.executor,
-				self._get_info_sync,
-				youtube_url,
-				ydl_opts
-			)
-			
-			if info:
-				return {
-					'title': info.get('title', 'Unknown'),
-					'duration': info.get('duration', 0),
-					'uploader': info.get('uploader', 'Unknown'),
-					'upload_date': info.get('upload_date', 'Unknown'),
-					'view_count': info.get('view_count', 0),
-					'description': info.get('description', '')[:500],  # Limit description length
-					'url': youtube_url
-				}
-			return None
-			
-		except Exception as e:
-			logger.error(f"Error getting video info: {str(e)}")
-			return None
+				'extract_flat': False,
+			}),
+			("aggressive", {
+				'quiet': True,
+				'no_warnings': True,
+				'extract_flat': False,
+				'user_agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+				'referer': 'https://www.google.com/',
+			}),
+		]
+		
+		for approach_name, ydl_opts in approaches:
+			try:
+				logger.info(f"Trying {approach_name} approach for video info")
+				
+				loop = asyncio.get_event_loop()
+				info = await loop.run_in_executor(
+					self.executor,
+					self._get_info_sync,
+					youtube_url,
+					ydl_opts
+				)
+				
+				if info:
+					logger.info(f"Successfully got video info using {approach_name} approach")
+					return {
+						'title': info.get('title', 'Unknown'),
+						'duration': info.get('duration', 0),
+						'uploader': info.get('uploader', 'Unknown'),
+						'upload_date': info.get('upload_date', 'Unknown'),
+						'view_count': info.get('view_count', 0),
+						'description': info.get('description', '')[:500],  # Limit description length
+						'url': youtube_url
+					}
+			except Exception as e:
+				logger.warning(f"{approach_name} approach failed: {str(e)}")
+				continue
+		
+		logger.error("All approaches failed to get video info")
+		return None
 	
 	def _extract_audio_sync(self, youtube_url: str, output_path: str, max_duration: int) -> bool:
 		"""Synchronous audio extraction (runs in thread pool)"""
@@ -296,7 +336,8 @@ class YouTubeExtractor:
 			temp_file.close()
 			audio_path = temp_file.name
 			
-			ydl_opts = {
+			ydl_opts = self._get_common_ydl_opts()
+			ydl_opts.update({
 				'format': 'bestaudio/best',
 				'outtmpl': audio_path,
 				'postprocessors': [{
@@ -309,24 +350,7 @@ class YouTubeExtractor:
 					'-t', str(duration)
 				],
 				'noplaylist': True,
-				'quiet': True,
-				'no_warnings': True,
-				# Bot detection bypass options
-				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-				'referer': 'https://www.youtube.com/',
-				'http_headers': {
-					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-					'Accept-Language': 'en-us,en;q=0.5',
-					'Accept-Encoding': 'gzip, deflate',
-					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-					'Connection': 'keep-alive',
-				},
-				'extractor_retries': 3,
-				'fragment_retries': 3,
-				'retries': 3,
-				'socket_timeout': 30,
-			}
+			})
 			
 			loop = asyncio.get_event_loop()
 			success = await loop.run_in_executor(
@@ -408,27 +432,10 @@ class YouTubeExtractor:
 			import speech_recognition as sr
 			
 			# Get the best audio URL
-			ydl_opts = {
+			ydl_opts = self._get_common_ydl_opts()
+			ydl_opts.update({
 				'format': 'bestaudio/best',
-				'quiet': True,
-				'no_warnings': True,
-				'extract_flat': False,
-				# Bot detection bypass options
-				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-				'referer': 'https://www.youtube.com/',
-				'http_headers': {
-					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-					'Accept-Language': 'en-us,en;q=0.5',
-					'Accept-Encoding': 'gzip, deflate',
-					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-					'Connection': 'keep-alive',
-				},
-				'extractor_retries': 3,
-				'fragment_retries': 3,
-				'retries': 3,
-				'socket_timeout': 30,
-			}
+			})
 			
 			with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 				info = ydl.extract_info(youtube_url, download=False)

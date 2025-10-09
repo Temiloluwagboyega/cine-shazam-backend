@@ -23,3 +23,14 @@ CHUNK_MAX_SECONDS=10
 # File Upload Configuration
 MAX_FILE_SIZE=104857600
 UPLOAD_TIMEOUT=300
+
+# YouTube Configuration
+# Option 1: YouTube Data API Key (Recommended for production)
+# Get your API key from: https://console.developers.google.com/
+# Enable YouTube Data API v3 and create credentials
+YOUTUBE_API_KEY=AIzaSyC4nvJOIJ7_r4RN3bduvhk_8ixijnwI2Pw
+
+# Option 2: YouTube Cookies (Optional - for accessing restricted videos)
+# Export cookies from your browser and paste them here in Netscape format
+# Use the export_youtube_cookies.py script for help
+YOUTUBE_COOKIES=

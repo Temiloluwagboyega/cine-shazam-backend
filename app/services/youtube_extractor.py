@@ -14,6 +14,56 @@ class YouTubeExtractor:
 	
 	def __init__(self):
 		self.executor = ThreadPoolExecutor(max_workers=2)
+		self.cookie_file_path = self._setup_cookie_file()
+	
+	def _setup_cookie_file(self) -> Optional[str]:
+		"""Setup a cookie file for manual YouTube cookies"""
+		try:
+			import os
+			cookie_dir = os.path.join(os.getcwd(), 'cookies')
+			os.makedirs(cookie_dir, exist_ok=True)
+			cookie_file = os.path.join(cookie_dir, 'youtube_cookies.txt')
+			
+			# Create a template cookie file if it doesn't exist
+			if not os.path.exists(cookie_file):
+				with open(cookie_file, 'w') as f:
+					f.write("# YouTube Cookies File\n")
+					f.write("# Add your YouTube cookies here in Netscape format\n")
+					f.write("# You can export cookies from your browser and paste them here\n")
+					f.write("# Format: domain	flag	path	secure	expiration	name	value\n")
+					f.write("# Example:\n")
+					f.write("# .youtube.com	TRUE	/	FALSE	1234567890	VISITOR_INFO1_LIVE	abc123\n")
+				
+				logger.info(f"Created cookie template file: {cookie_file}")
+				logger.info("To use YouTube cookies, export them from your browser and add them to this file")
+			
+			return cookie_file
+		except Exception as e:
+			logger.debug(f"Failed to setup cookie file: {e}")
+			return None
+	
+	def _get_cookies_from_env(self) -> Optional[str]:
+		"""Get cookies from environment variable (for production deployment)"""
+		try:
+			import os
+			import tempfile
+			
+			# Check for YouTube cookies in environment variable
+			youtube_cookies = os.getenv('YOUTUBE_COOKIES')
+			if not youtube_cookies:
+				return None
+			
+			# Create a temporary cookie file from environment variable
+			temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+			temp_cookie_file.write(youtube_cookies)
+			temp_cookie_file.close()
+			
+			logger.info("Using YouTube cookies from environment variable")
+			return temp_cookie_file.name
+			
+		except Exception as e:
+			logger.debug(f"Failed to get cookies from environment: {e}")
+			return None
 	
 	def _get_common_ydl_opts(self) -> Dict:
 		"""Get common yt-dlp options for all operations with bot detection bypass"""
@@ -51,37 +101,73 @@ class YouTubeExtractor:
 			'no_check_certificate': False,
 		}
 		
+		# Try environment variable cookies first (for production)
+		cookies_from_env = self._get_cookies_from_env()
+		if cookies_from_env:
+			opts['cookiefile'] = cookies_from_env
+			logger.info("Using cookies from environment variable")
+			return opts
+		
 		# Try to use cookies if available
 		try:
 			import os
 			import platform
 			
+			# Try different browser cookie sources
+			browser_configs = []
+			
 			if platform.system() == 'Windows':
-				cookie_paths = [
-					os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies'),
-					os.path.expanduser('~\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies'),
+				browser_configs = [
+					('chrome', None, None, os.path.expanduser('~\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies')),
+					('edge', None, None, os.path.expanduser('~\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies')),
+					('firefox', None, None, os.path.expanduser('~\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\')),
 				]
 			elif platform.system() == 'Darwin':  # macOS
-				cookie_paths = [
-					os.path.expanduser('~/Library/Application Support/Google/Chrome/Default/Cookies'),
-					os.path.expanduser('~/Library/Application Support/Microsoft Edge/Default/Cookies'),
+				browser_configs = [
+					('chrome', None, None, os.path.expanduser('~/Library/Application Support/Google/Chrome/Default/Cookies')),
+					('edge', None, None, os.path.expanduser('~/Library/Application Support/Microsoft Edge/Default/Cookies')),
+					('firefox', None, None, os.path.expanduser('~/Library/Application Support/Firefox/Profiles/')),
+					('safari', None, None, os.path.expanduser('~/Library/Cookies/Cookies.binarycookies')),
 				]
 			else:  # Linux
-				cookie_paths = [
-					os.path.expanduser('~/.config/google-chrome/Default/Cookies'),
-					os.path.expanduser('~/.config/microsoft-edge/Default/Cookies'),
+				browser_configs = [
+					('chrome', None, None, os.path.expanduser('~/.config/google-chrome/Default/Cookies')),
+					('edge', None, None, os.path.expanduser('~/.config/microsoft-edge/Default/Cookies')),
+					('firefox', None, None, os.path.expanduser('~/.mozilla/firefox/')),
 				]
 			
 			# Try to use cookies from browser
-			for cookie_path in cookie_paths:
+			for browser, profile, keyring, cookie_path in browser_configs:
 				if os.path.exists(cookie_path):
 					try:
-						opts['cookiesfrombrowser'] = ('chrome', None, None, cookie_path)
-						logger.info(f"Using cookies from: {cookie_path}")
+						opts['cookiesfrombrowser'] = (browser, profile, keyring, cookie_path)
+						logger.info(f"Using cookies from {browser}: {cookie_path}")
 						break
 					except Exception as e:
-						logger.debug(f"Failed to use cookies from {cookie_path}: {e}")
+						logger.debug(f"Failed to use cookies from {browser} ({cookie_path}): {e}")
 						continue
+			
+			# If no browser cookies found, try manual cookie file
+			if 'cookiesfrombrowser' not in opts and self.cookie_file_path and os.path.exists(self.cookie_file_path):
+				try:
+					# Check if the cookie file has actual cookies (not just template)
+					with open(self.cookie_file_path, 'r') as f:
+						content = f.read()
+						if content.strip() and not content.startswith('#'):
+							opts['cookiefile'] = self.cookie_file_path
+							logger.info(f"Using manual cookie file: {self.cookie_file_path}")
+				except Exception as e:
+					logger.debug(f"Failed to use manual cookie file: {e}")
+			
+			# If still no cookies, try to use cookiesfrombrowser without specific path
+			if 'cookiesfrombrowser' not in opts and 'cookiefile' not in opts:
+				try:
+					# Try to use yt-dlp's automatic cookie detection
+					opts['cookiesfrombrowser'] = ('chrome',)
+					logger.info("Using automatic Chrome cookie detection")
+				except Exception as e:
+					logger.debug(f"Automatic cookie detection failed: {e}")
+					
 		except Exception as e:
 			logger.debug(f"Cookie setup failed: {e}")
 		
@@ -252,6 +338,18 @@ class YouTubeExtractor:
 				'user_agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
 				'referer': 'https://www.google.com/',
 			}),
+			("production", {
+				'quiet': True,
+				'no_warnings': True,
+				'extract_flat': False,
+				'user_agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+				'referer': 'https://www.google.com/',
+				'geo_bypass': True,
+				'geo_bypass_country': 'US',
+				'extractor_retries': 3,
+				'retries': 3,
+				'socket_timeout': 30,
+			}),
 		]
 		
 		for approach_name, ydl_opts in approaches:
@@ -281,8 +379,211 @@ class YouTubeExtractor:
 				logger.warning(f"{approach_name} approach failed: {str(e)}")
 				continue
 		
-		logger.error("All approaches failed to get video info")
-		return None
+		# If all yt-dlp approaches fail, try alternative method
+		logger.warning("All yt-dlp approaches failed, trying alternative method")
+		return await self._get_video_info_alternative(youtube_url)
+	
+	async def _get_video_info_alternative(self, youtube_url: str) -> Optional[Dict]:
+		"""Alternative method to get video info using public APIs"""
+		try:
+			import re
+			import aiohttp
+			
+			# Extract video ID from URL
+			video_id = self._extract_video_id(youtube_url)
+			if not video_id:
+				logger.error("Could not extract video ID from URL")
+				return None
+			
+			# Try multiple public API methods
+			methods = [
+				("oEmbed", self._get_video_info_oembed),
+				("YouTube Data API", self._get_video_info_api),
+				("Public Scraping", self._get_video_info_scraping),
+			]
+			
+			for method_name, method_func in methods:
+				try:
+					logger.info(f"Trying {method_name} for video info")
+					result = await method_func(youtube_url, video_id)
+					if result:
+						logger.info(f"Successfully got video info using {method_name}")
+						return result
+				except Exception as e:
+					logger.warning(f"{method_name} failed: {str(e)}")
+					continue
+			
+			# If all methods fail, return basic info with video ID
+			logger.warning("All alternative methods failed, returning basic info")
+			return {
+				'title': f'Video {video_id}',
+				'duration': 0,
+				'uploader': 'Unknown',
+				'upload_date': 'Unknown',
+				'view_count': 0,
+				'description': '',
+				'url': youtube_url,
+				'video_id': video_id,
+				'source': 'fallback'
+			}
+			
+		except Exception as e:
+			logger.error(f"Alternative video info method failed: {str(e)}")
+			return None
+	
+	async def _get_video_info_oembed(self, youtube_url: str, video_id: str) -> Optional[Dict]:
+		"""Get video info using YouTube's oEmbed API (public, no auth required)"""
+		try:
+			import aiohttp
+			
+			oembed_url = f"https://www.youtube.com/oembed?url={youtube_url}&format=json"
+			
+			async with aiohttp.ClientSession() as session:
+				async with session.get(oembed_url) as response:
+					if response.status == 200:
+						data = await response.json()
+						return {
+							'title': data.get('title', 'Unknown'),
+							'duration': 0,  # oEmbed doesn't provide duration
+							'uploader': data.get('author_name', 'Unknown'),
+							'upload_date': 'Unknown',
+							'view_count': 0,
+							'description': '',
+							'url': youtube_url,
+							'thumbnail': data.get('thumbnail_url', ''),
+							'source': 'oembed'
+						}
+			return None
+		except Exception as e:
+			logger.debug(f"oEmbed API failed: {e}")
+			return None
+	
+	async def _get_video_info_api(self, youtube_url: str, video_id: str) -> Optional[Dict]:
+		"""Get video info using YouTube Data API v3 (requires API key)"""
+		try:
+			import aiohttp
+			import os
+			
+			# Check if we have a YouTube API key
+			api_key = os.getenv('YOUTUBE_API_KEY')
+			if not api_key:
+				logger.debug("No YouTube API key found, skipping API method")
+				return None
+			
+			api_url = f"https://www.googleapis.com/youtube/v3/videos"
+			params = {
+				'part': 'snippet,statistics,contentDetails',
+				'id': video_id,
+				'key': api_key
+			}
+			
+			async with aiohttp.ClientSession() as session:
+				async with session.get(api_url, params=params) as response:
+					if response.status == 200:
+						data = await response.json()
+						if data.get('items'):
+							item = data['items'][0]
+							snippet = item.get('snippet', {})
+							statistics = item.get('statistics', {})
+							content_details = item.get('contentDetails', {})
+							
+							# Parse duration (ISO 8601 format)
+							duration = self._parse_duration(content_details.get('duration', ''))
+							
+							return {
+								'title': snippet.get('title', 'Unknown'),
+								'duration': duration,
+								'uploader': snippet.get('channelTitle', 'Unknown'),
+								'upload_date': snippet.get('publishedAt', 'Unknown'),
+								'view_count': int(statistics.get('viewCount', 0)),
+								'description': snippet.get('description', ''),
+								'url': youtube_url,
+								'thumbnail': snippet.get('thumbnails', {}).get('high', {}).get('url', ''),
+								'source': 'youtube_api'
+							}
+			return None
+		except Exception as e:
+			logger.debug(f"YouTube API failed: {e}")
+			return None
+	
+	async def _get_video_info_scraping(self, youtube_url: str, video_id: str) -> Optional[Dict]:
+		"""Get video info using public scraping (no auth required)"""
+		try:
+			import aiohttp
+			import re
+			
+			# Try to get basic info from YouTube's public page
+			headers = {
+				'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+			}
+			
+			async with aiohttp.ClientSession() as session:
+				async with session.get(youtube_url, headers=headers) as response:
+					if response.status == 200:
+						html = await response.text()
+						
+						# Extract title
+						title_match = re.search(r'<title>([^<]+)</title>', html)
+						title = title_match.group(1).replace(' - YouTube', '') if title_match else 'Unknown'
+						
+						# Extract channel name
+						channel_match = re.search(r'"ownerText":\{"runs":\[\{"text":"([^"]+)"', html)
+						channel = channel_match.group(1) if channel_match else 'Unknown'
+						
+						return {
+							'title': title,
+							'duration': 0,
+							'uploader': channel,
+							'upload_date': 'Unknown',
+							'view_count': 0,
+							'description': '',
+							'url': youtube_url,
+							'thumbnail': f'https://img.youtube.com/vi/{video_id}/maxresdefault.jpg',
+							'source': 'scraping'
+						}
+			return None
+		except Exception as e:
+			logger.debug(f"Scraping method failed: {e}")
+			return None
+	
+	def _parse_duration(self, duration: str) -> int:
+		"""Parse ISO 8601 duration to seconds"""
+		try:
+			import re
+			
+			# Parse PT1H2M3S format
+			match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+			if match:
+				hours = int(match.group(1) or 0)
+				minutes = int(match.group(2) or 0)
+				seconds = int(match.group(3) or 0)
+				return hours * 3600 + minutes * 60 + seconds
+			return 0
+		except Exception:
+			return 0
+	
+	def _extract_video_id(self, youtube_url: str) -> Optional[str]:
+		"""Extract video ID from YouTube URL"""
+		try:
+			import re
+			
+			# Various YouTube URL patterns
+			patterns = [
+				r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)',
+				r'youtube\.com\/v\/([^&\n?#]+)',
+				r'youtube\.com\/watch\?.*v=([^&\n?#]+)',
+			]
+			
+			for pattern in patterns:
+				match = re.search(pattern, youtube_url)
+				if match:
+					return match.group(1)
+			
+			return None
+		except Exception as e:
+			logger.debug(f"Failed to extract video ID: {e}")
+			return None
 	
 	def _extract_audio_sync(self, youtube_url: str, output_path: str, max_duration: int) -> bool:
 		"""Synchronous audio extraction (runs in thread pool)"""

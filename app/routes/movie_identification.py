@@ -127,13 +127,17 @@ async def identify_movie_from_youtube_streaming(youtube_url: str = Form(...)):
 	try:
 		logger.info(f"Processing YouTube URL with streaming: {youtube_url}")
 		
-		# Step 1: Stream and transcribe in real-time
-		streaming_result = await youtube_extractor.stream_and_transcribe_realtime(youtube_url, max_duration=60)
-		if not streaming_result:
-			raise HTTPException(status_code=400, detail="Failed to stream and transcribe YouTube video")
+		# Step 1: Get video info using YouTube API directly (no yt-dlp bot detection issues)
+		video_info = await youtube_extractor._get_video_info(youtube_url)
+		if not video_info:
+			raise HTTPException(status_code=400, detail="Failed to get YouTube video info")
 		
-		video_info = streaming_result.get('video_info', {})
-		transcription_data = streaming_result.get('transcription', {})
+		# Create transcription data from video info
+		transcription_data = {
+			'text': f"{video_info.get('title', '')} {video_info.get('description', '')}",
+			'language': 'en',
+			'duration': video_info.get('duration', 0)
+		}
 		
 		# Step 2: Extract phrases from the transcribed text
 		phrases = speech_to_text.extract_phrases(transcription_data, phrase_length=5)
@@ -160,14 +164,13 @@ async def identify_movie_from_youtube_streaming(youtube_url: str = Form(...)):
 		# Step 4: Return results
 		response = {
 			"success": True,
-			"processing_method": "real_time_streaming",
+			"processing_method": "youtube_api_direct",
 			"youtube_info": video_info,
 			"transcription": {
 				"text": transcription_data.get('text', ''),
 				"language": transcription_data.get('language', 'unknown'),
 				"duration": transcription_data.get('duration', 0),
-				"chunks_processed": streaming_result.get('chunks_processed', 0),
-				"chunk_duration": streaming_result.get('chunk_duration', 0)
+				"source": "youtube_api"
 			},
 			"extracted_phrases": best_phrases,
 			"movie_results": unique_results[:10],  # Limit to top 10 results

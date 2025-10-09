@@ -38,6 +38,10 @@ WHISPER_MODEL=base
 4. **Start Command**: `python start.py`
 5. **Plan**: Starter (or higher for production)
 
+**Note**: The system automatically uses:
+- **Development**: Uvicorn with hot reload
+- **Production**: Gunicorn with multiple workers for better performance
+
 ### 4. MongoDB Atlas Setup
 
 1. Create a MongoDB Atlas cluster
@@ -144,6 +148,18 @@ The application includes:
 2. **Caching**: Consider adding Redis for caching
 3. **CDN**: Use CDN for static assets
 4. **Load Balancing**: Use multiple workers in production
+5. **Gunicorn Configuration**: Optimized for production with:
+   - Multiple worker processes
+   - Uvicorn worker class for async support
+   - Request timeouts and limits
+   - Graceful worker restarts
+
+### Gunicorn Settings:
+- **Workers**: CPU cores × 2 + 1
+- **Worker Class**: `uvicorn.workers.UvicornWorker`
+- **Timeout**: 300 seconds (5 minutes)
+- **Max Requests**: 1000 per worker (prevents memory leaks)
+- **Keep-Alive**: 2 seconds
 
 ## 🔄 Updates and Maintenance
 

@@ -2,16 +2,39 @@
 """
 Production startup script for Cine Shazam Backend
 """
-import uvicorn
+import os
+import subprocess
+import sys
 from app.config import settings
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.DEBUG,
-        log_level="info" if not settings.DEBUG else "debug",
-        access_log=True,
-        workers=1 if settings.DEBUG else 4,  # Multiple workers in production
-    )
+    if settings.DEBUG:
+        # Use uvicorn for development
+        import uvicorn
+        uvicorn.run(
+            "app.main:app",
+            host=settings.HOST,
+            port=settings.PORT,
+            reload=True,
+            log_level="debug",
+            access_log=True,
+        )
+    else:
+        # Use gunicorn for production
+        gunicorn_cmd = [
+            "gunicorn",
+            "app.main:app",
+            "-c", "gunicorn.conf.py",  # Use config file
+        ]
+        
+        print(f"Starting production server with Gunicorn...")
+        print(f"Command: {' '.join(gunicorn_cmd)}")
+        
+        try:
+            subprocess.run(gunicorn_cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Gunicorn failed to start: {e}")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("Server stopped by user")
+            sys.exit(0)

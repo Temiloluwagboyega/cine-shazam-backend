@@ -130,36 +130,24 @@ async def identify_movie_from_youtube_streaming(youtube_url: str = Form(...)):
 		# Step 1: Extract actual audio from YouTube and transcribe it
 		logger.info(f"Extracting audio from YouTube URL: {youtube_url}")
 		
-		# Try to extract audio using yt-dlp with bot detection bypass
+		# Extract audio using yt-dlp with bot detection bypass
 		audio_result = await youtube_extractor.extract_audio_from_url(youtube_url, max_duration=60)
 		
 		if not audio_result:
-			# Fallback: if audio extraction fails, use video info only
-			logger.warning("Audio extraction failed, falling back to video info only")
-			video_info = await youtube_extractor._get_video_info(youtube_url)
-			if not video_info:
-				raise HTTPException(status_code=400, detail="Failed to get YouTube video info")
-			
-			# Use title-based identification as fallback
-			transcription_data = {
-				'text': video_info.get('title', ''),
-				'language': 'en',
-				'duration': video_info.get('duration', 0),
-				'source': 'title_fallback'
-			}
-		else:
-			# Successfully extracted audio
-			audio_path, video_info = audio_result
-			logger.info(f"Successfully extracted audio: {audio_path}")
-			
-			# Step 2: Transcribe the actual audio
-			transcription_data = await speech_to_text.transcribe_audio_file(audio_path)
-			
-			# Clean up audio file
-			try:
-				os.unlink(audio_path)
-			except Exception as e:
-				logger.warning(f"Failed to clean up audio file: {e}")
+			raise HTTPException(status_code=400, detail="Failed to extract audio from YouTube video")
+		
+		# Successfully extracted audio
+		audio_path, _ = audio_result  # We don't need video_info anymore
+		logger.info(f"Successfully extracted audio: {audio_path}")
+		
+		# Step 2: Transcribe the actual audio
+		transcription_data = await speech_to_text.transcribe_audio_file(audio_path)
+		
+		# Clean up audio file
+		try:
+			os.unlink(audio_path)
+		except Exception as e:
+			logger.warning(f"Failed to clean up audio file: {e}")
 		
 		if not transcription_data or not transcription_data.get('text'):
 			raise HTTPException(status_code=400, detail="Failed to transcribe audio from video")
@@ -182,16 +170,15 @@ async def identify_movie_from_youtube_streaming(youtube_url: str = Form(...)):
 				seen.add(key)
 		
 		# Step 5: Return results
-		processing_method = "audio_extraction" if audio_result else "title_fallback"
 		response = {
 			"success": True,
-			"processing_method": processing_method,
-			"youtube_info": video_info,
+			"processing_method": "audio_extraction",
+			"youtube_url": youtube_url,
 			"transcription": {
 				"text": transcription_data.get('text', ''),
 				"language": transcription_data.get('language', 'unknown'),
 				"duration": transcription_data.get('duration', 0),
-				"source": transcription_data.get('source', 'audio_transcription')
+				"source": "audio_transcription"
 			},
 			"search_text": search_text,
 			"movie_results": unique_results[:10],  # Limit to top 10 results

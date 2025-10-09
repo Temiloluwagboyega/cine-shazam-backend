@@ -7,6 +7,7 @@ python-multipart==0.0.20
 
 # HTTP and requests
 requests==2.32.5
+aiohttp==3.10.11
 
 # Media processing
 yt-dlp==2025.9.26

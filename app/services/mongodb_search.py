@@ -3,6 +3,8 @@ from typing import List, Dict, Optional
 import pymongo
 from pymongo import MongoClient
 import re
+import ssl
+import urllib.parse
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -17,7 +19,7 @@ class MongoDBSubtitleSearch:
 		self._connected = False
 		
 	def _connect(self):
-		"""Connect to MongoDB with fallback SSL configurations"""
+		"""Connect to MongoDB with comprehensive SSL and connection strategies"""
 		if self._connected:
 			return
 			
@@ -26,63 +28,43 @@ class MongoDBSubtitleSearch:
 			self._connected = False
 			return
 		
-		# Try multiple connection configurations
-		connection_configs = [
+		# Parse the MongoDB URI to extract components
+		parsed_uri = urllib.parse.urlparse(settings.MONGO_URI)
+		
+		# Try multiple connection strategies
+		connection_strategies = [
 			{
-				"name": "Standard SSL",
-				"params": {
-					"tls": True,
-					"tlsAllowInvalidCertificates": False,
-					"tlsAllowInvalidHostnames": False,
-					"serverSelectionTimeoutMS": 30000,
-					"connectTimeoutMS": 30000,
-					"socketTimeoutMS": 30000,
-					"maxPoolSize": 10,
-					"retryWrites": True
-				}
+				"name": "Custom SSL Context",
+				"method": self._try_custom_ssl_context
 			},
 			{
-				"name": "Relaxed SSL",
-				"params": {
-					"tls": True,
-					"tlsAllowInvalidCertificates": True,
-					"tlsAllowInvalidHostnames": True,
-					"serverSelectionTimeoutMS": 30000,
-					"connectTimeoutMS": 30000,
-					"socketTimeoutMS": 30000,
-					"maxPoolSize": 10,
-					"retryWrites": True
-				}
+				"name": "Legacy SSL Parameters",
+				"method": self._try_legacy_ssl_params
 			},
 			{
-				"name": "No SSL",
-				"params": {
-					"tls": False,
-					"serverSelectionTimeoutMS": 30000,
-					"connectTimeoutMS": 30000,
-					"socketTimeoutMS": 30000,
-					"maxPoolSize": 10,
-					"retryWrites": True
-				}
+				"name": "Direct Connection String",
+				"method": self._try_direct_connection
+			},
+			{
+				"name": "Legacy SSL",
+				"method": self._try_legacy_ssl
+			},
+			{
+				"name": "Minimal Configuration",
+				"method": self._try_minimal_config
 			}
 		]
 		
-		for config in connection_configs:
+		for strategy in connection_strategies:
 			try:
-				logger.info(f"Trying MongoDB connection with {config['name']}...")
+				logger.info(f"Trying MongoDB connection with {strategy['name']}...")
 				
-				self.client = MongoClient(settings.MONGO_URI, **config['params'])
-				self.db = self.client[settings.MONGO_DB]
-				self.collection = self.db["movie_subtitles"]
-				
-				# Test connection
-				self.collection.count_documents({})
-				self._connected = True
-				logger.info(f"Successfully connected to MongoDB using {config['name']}")
-				return
-				
+				if strategy['method']():
+					logger.info(f"Successfully connected to MongoDB using {strategy['name']}")
+					return
+					
 			except Exception as e:
-				logger.warning(f"Failed to connect with {config['name']}: {str(e)}")
+				logger.warning(f"Failed to connect with {strategy['name']}: {str(e)}")
 				if self.client:
 					self.client.close()
 					self.client = None
@@ -91,6 +73,143 @@ class MongoDBSubtitleSearch:
 		# If all connection attempts failed
 		logger.error("All MongoDB connection attempts failed")
 		self._connected = False
+	
+	def _try_custom_ssl_context(self) -> bool:
+		"""Try connection with custom SSL context"""
+		try:
+			# Create a custom SSL context
+			ssl_context = ssl.create_default_context()
+			ssl_context.check_hostname = False
+			ssl_context.verify_mode = ssl.CERT_NONE
+			
+			# Try with custom SSL context
+			self.client = MongoClient(
+				settings.MONGO_URI,
+				tls=True,
+				tlsInsecure=True,
+				ssl_context=ssl_context,
+				serverSelectionTimeoutMS=15000,
+				connectTimeoutMS=15000,
+				socketTimeoutMS=15000,
+				maxPoolSize=5,
+				retryWrites=False,
+				directConnection=False
+			)
+			
+			return self._test_connection()
+			
+		except Exception as e:
+			logger.debug(f"Custom SSL context failed: {e}")
+			return False
+	
+	def _try_direct_connection(self) -> bool:
+		"""Try direct connection to primary server"""
+		try:
+			# Extract host from URI and try direct connection
+			parsed_uri = urllib.parse.urlparse(settings.MONGO_URI)
+			host = parsed_uri.hostname
+			
+			if host and 'mongodb.net' in host:
+				# Try connecting directly to the primary shard
+				direct_uri = settings.MONGO_URI.replace('mongodb+srv://', 'mongodb://')
+				direct_uri = direct_uri.replace('?retryWrites=true&w=majority', '')
+				
+				self.client = MongoClient(
+					direct_uri,
+					tls=True,
+					tlsAllowInvalidCertificates=True,
+					tlsAllowInvalidHostnames=True,
+					serverSelectionTimeoutMS=10000,
+					connectTimeoutMS=10000,
+					socketTimeoutMS=10000,
+					maxPoolSize=3,
+					retryWrites=False,
+					directConnection=True
+				)
+				
+				return self._test_connection()
+			
+		except Exception as e:
+			logger.debug(f"Direct connection failed: {e}")
+			return False
+	
+	def _try_legacy_ssl_params(self) -> bool:
+		"""Try legacy SSL parameters that might work better with older pymongo"""
+		try:
+			self.client = MongoClient(
+				settings.MONGO_URI,
+				ssl=True,
+				ssl_cert_reqs=ssl.CERT_NONE,
+				ssl_match_hostname=False,
+				ssl_ca_certs=None,
+				ssl_certfile=None,
+				ssl_keyfile=None,
+				serverSelectionTimeoutMS=15000,
+				connectTimeoutMS=15000,
+				socketTimeoutMS=15000,
+				maxPoolSize=3,
+				retryWrites=False,
+				directConnection=False
+			)
+			
+			return self._test_connection()
+			
+		except Exception as e:
+			logger.debug(f"Legacy SSL params failed: {e}")
+			return False
+	
+	def _try_legacy_ssl(self) -> bool:
+		"""Try legacy SSL configuration"""
+		try:
+			self.client = MongoClient(
+				settings.MONGO_URI,
+				ssl=True,
+				ssl_cert_reqs=ssl.CERT_NONE,
+				ssl_match_hostname=False,
+				serverSelectionTimeoutMS=20000,
+				connectTimeoutMS=20000,
+				socketTimeoutMS=20000,
+				maxPoolSize=5,
+				retryWrites=False
+			)
+			
+			return self._test_connection()
+			
+		except Exception as e:
+			logger.debug(f"Legacy SSL failed: {e}")
+			return False
+	
+	def _try_minimal_config(self) -> bool:
+		"""Try minimal configuration with basic parameters"""
+		try:
+			self.client = MongoClient(
+				settings.MONGO_URI,
+				serverSelectionTimeoutMS=5000,
+				connectTimeoutMS=5000,
+				socketTimeoutMS=5000,
+				maxPoolSize=1
+			)
+			
+			return self._test_connection()
+			
+		except Exception as e:
+			logger.debug(f"Minimal config failed: {e}")
+			return False
+	
+	def _test_connection(self) -> bool:
+		"""Test the current connection and set up database/collection"""
+		try:
+			self.db = self.client[settings.MONGO_DB]
+			self.collection = self.db["movie_subtitles"]
+			
+			# Test connection with a simple operation
+			self.collection.count_documents({})
+			self._connected = True
+			return True
+			
+		except Exception as e:
+			logger.debug(f"Connection test failed: {e}")
+			return False
 	
 	async def search_subtitles(self, query: str, limit: int = 10) -> List[Dict]:
 		"""

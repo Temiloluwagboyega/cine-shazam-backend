@@ -16,7 +16,7 @@ class YouTubeExtractor:
 		self.executor = ThreadPoolExecutor(max_workers=2)
 		
 	def _get_ydl_opts(self, output_path: str) -> Dict:
-		"""Get yt-dlp options for audio extraction"""
+		"""Get yt-dlp options for audio extraction with bot detection bypass"""
 		return {
 			'format': 'bestaudio/best',
 			'outtmpl': output_path.replace('.wav', '.%(ext)s'),
@@ -29,6 +29,22 @@ class YouTubeExtractor:
 			'quiet': True,
 			'no_warnings': True,
 			'extract_flat': False,
+			# Bot detection bypass options
+			'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+			'referer': 'https://www.youtube.com/',
+			'http_headers': {
+				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+				'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+				'Accept-Language': 'en-us,en;q=0.5',
+				'Accept-Encoding': 'gzip, deflate',
+				'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+				'Connection': 'keep-alive',
+			},
+			# Additional bypass options
+			'extractor_retries': 3,
+			'fragment_retries': 3,
+			'retries': 3,
+			'socket_timeout': 30,
 		}
 	
 	async def extract_audio_from_url(self, youtube_url: str, max_duration: int = 300) -> Optional[Tuple[str, Dict]]:
@@ -86,6 +102,21 @@ class YouTubeExtractor:
 				'quiet': True,
 				'no_warnings': True,
 				'extract_flat': False,
+				# Bot detection bypass options
+				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+				'referer': 'https://www.youtube.com/',
+				'http_headers': {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+					'Accept-Language': 'en-us,en;q=0.5',
+					'Accept-Encoding': 'gzip, deflate',
+					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+					'Connection': 'keep-alive',
+				},
+				'extractor_retries': 3,
+				'fragment_retries': 3,
+				'retries': 3,
+				'socket_timeout': 30,
 			}
 			
 			with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -172,6 +203,21 @@ class YouTubeExtractor:
 			ydl_opts = {
 				'quiet': True,
 				'no_warnings': True,
+				# Bot detection bypass options
+				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+				'referer': 'https://www.youtube.com/',
+				'http_headers': {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+					'Accept-Language': 'en-us,en;q=0.5',
+					'Accept-Encoding': 'gzip, deflate',
+					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+					'Connection': 'keep-alive',
+				},
+				'extractor_retries': 3,
+				'fragment_retries': 3,
+				'retries': 3,
+				'socket_timeout': 30,
 			}
 			
 			loop = asyncio.get_event_loop()
@@ -265,6 +311,21 @@ class YouTubeExtractor:
 				'noplaylist': True,
 				'quiet': True,
 				'no_warnings': True,
+				# Bot detection bypass options
+				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+				'referer': 'https://www.youtube.com/',
+				'http_headers': {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+					'Accept-Language': 'en-us,en;q=0.5',
+					'Accept-Encoding': 'gzip, deflate',
+					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+					'Connection': 'keep-alive',
+				},
+				'extractor_retries': 3,
+				'fragment_retries': 3,
+				'retries': 3,
+				'socket_timeout': 30,
 			}
 			
 			loop = asyncio.get_event_loop()
@@ -352,6 +413,21 @@ class YouTubeExtractor:
 				'quiet': True,
 				'no_warnings': True,
 				'extract_flat': False,
+				# Bot detection bypass options
+				'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+				'referer': 'https://www.youtube.com/',
+				'http_headers': {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+					'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+					'Accept-Language': 'en-us,en;q=0.5',
+					'Accept-Encoding': 'gzip, deflate',
+					'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+					'Connection': 'keep-alive',
+				},
+				'extractor_retries': 3,
+				'fragment_retries': 3,
+				'retries': 3,
+				'socket_timeout': 30,
 			}
 			
 			with yt_dlp.YoutubeDL(ydl_opts) as ydl:

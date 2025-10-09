@@ -127,30 +127,50 @@ async def identify_movie_from_youtube_streaming(youtube_url: str = Form(...)):
 	try:
 		logger.info(f"Processing YouTube URL with streaming: {youtube_url}")
 		
-		# Step 1: Get video info using YouTube API directly (no yt-dlp bot detection issues)
-		video_info = await youtube_extractor._get_video_info(youtube_url)
-		if not video_info:
-			raise HTTPException(status_code=400, detail="Failed to get YouTube video info")
+		# Step 1: Extract actual audio from YouTube and transcribe it
+		logger.info(f"Extracting audio from YouTube URL: {youtube_url}")
 		
-		# Create transcription data from video info
-		transcription_data = {
-			'text': f"{video_info.get('title', '')} {video_info.get('description', '')}",
-			'language': 'en',
-			'duration': video_info.get('duration', 0)
-		}
+		# Try to extract audio using yt-dlp with bot detection bypass
+		audio_result = await youtube_extractor.extract_audio_from_url(youtube_url, max_duration=60)
 		
-		# Step 2: Extract phrases from the transcribed text
-		phrases = speech_to_text.extract_phrases(transcription_data, phrase_length=5)
-		best_phrases = speech_to_text.get_best_phrases(phrases, count=3)
+		if not audio_result:
+			# Fallback: if audio extraction fails, use video info only
+			logger.warning("Audio extraction failed, falling back to video info only")
+			video_info = await youtube_extractor._get_video_info(youtube_url)
+			if not video_info:
+				raise HTTPException(status_code=400, detail="Failed to get YouTube video info")
+			
+			# Use title-based identification as fallback
+			transcription_data = {
+				'text': video_info.get('title', ''),
+				'language': 'en',
+				'duration': video_info.get('duration', 0),
+				'source': 'title_fallback'
+			}
+		else:
+			# Successfully extracted audio
+			audio_path, video_info = audio_result
+			logger.info(f"Successfully extracted audio: {audio_path}")
+			
+			# Step 2: Transcribe the actual audio
+			transcription_data = await speech_to_text.transcribe_audio_file(audio_path)
+			
+			# Clean up audio file
+			try:
+				os.unlink(audio_path)
+			except Exception as e:
+				logger.warning(f"Failed to clean up audio file: {e}")
 		
-		if not best_phrases:
-			raise HTTPException(status_code=400, detail="No meaningful phrases found in audio")
+		if not transcription_data or not transcription_data.get('text'):
+			raise HTTPException(status_code=400, detail="Failed to transcribe audio from video")
 		
-		# Step 3: Query MongoDB for movie identification
-		results = []
-		for phrase in best_phrases:
-			subtitle_results = await multi_search.mongodb_search.search_subtitles(phrase, limit=5)
-			results.extend(subtitle_results)
+		# Step 3: Use the transcribed text directly for search
+		search_text = transcription_data.get('text', '')
+		if not search_text:
+			raise HTTPException(status_code=400, detail="No text found in transcription")
+		
+		# Step 4: Query MongoDB for movie identification using the transcribed text
+		results = await multi_search.mongodb_search.search_subtitles(search_text, limit=10)
 		
 		# Remove duplicates based on movie title and year
 		unique_results = []
@@ -161,18 +181,19 @@ async def identify_movie_from_youtube_streaming(youtube_url: str = Form(...)):
 				unique_results.append(result)
 				seen.add(key)
 		
-		# Step 4: Return results
+		# Step 5: Return results
+		processing_method = "audio_extraction" if audio_result else "title_fallback"
 		response = {
 			"success": True,
-			"processing_method": "youtube_api_direct",
+			"processing_method": processing_method,
 			"youtube_info": video_info,
 			"transcription": {
 				"text": transcription_data.get('text', ''),
 				"language": transcription_data.get('language', 'unknown'),
 				"duration": transcription_data.get('duration', 0),
-				"source": "youtube_api"
+				"source": transcription_data.get('source', 'audio_transcription')
 			},
-			"extracted_phrases": best_phrases,
+			"search_text": search_text,
 			"movie_results": unique_results[:10],  # Limit to top 10 results
 			"total_results": len(unique_results)
 		}
